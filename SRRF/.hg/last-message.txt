@@ -1,0 +1,1 @@
+moved sequence splitter to squirrel. commented out a duplicate setprefs.
