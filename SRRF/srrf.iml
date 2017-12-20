@@ -10,5 +10,6 @@
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="module" module-name="core" />
     <orderEntry type="library" name="Fiji.jars" level="project" />
+    <orderEntry type="library" name="Fiji.plugins" level="project" />
   </component>
 </module>
