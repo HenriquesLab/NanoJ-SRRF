@@ -7,7 +7,6 @@ import ij.gui.NonBlockingGenericDialog;
 import ij.measure.ResultsTable;
 import ij.process.FloatProcessor;
 import nanoj.core.java.aparapi.CLDevicesInfo;
-import nanoj.core.java.gui.tools.io.SaveStackAsNJI_;
 import nanoj.core.java.io.LoadNanoJTable;
 import nanoj.core.java.io.ThreadedPartitionData;
 import nanoj.srrf.java.SRRF;
@@ -22,34 +21,31 @@ import static nanoj.core.java.array.ArrayMath.getMaxValue;
 import static nanoj.core.java.array.ArrayMath.getMinValue;
 import static nanoj.core.java.imagej.ResultsTableTools.resultsTableToDataMap;
 import static nanoj.core.java.tools.DontShowAgainDialog.dontShowAgainDialog;
-import static nanoj.core.java.tools.NJ_LUT.applyLUT_NanoJ_Orange;
 
 /**
  * Created by sculley on 15/01/2018.
  */
 public class SRRFParameterSweep_ extends _BaseSRRFDialog_ {
 
-    public boolean doDriftCorrection, doRR, doTRM, doTRA, doTRPPM, doTRAC2, doTRAC4, doIW, doGW, doGS;
+    public boolean doDriftCorrection, doRR, doTRM, doTRA, doTRPPM, doTRAC2, doTRAC4, doGW, doGS;
     boolean _doDriftCorrection;
-    public int radialityMagnification, SRRForder, frameStart, frameEnd, framesPerTimePoint, blockBorderNotConsideringDrift;
+    public int radialityMagnification, blockBorderNotConsideringDrift;
     int _frameStart, _frameEnd, _framesPerTimePoint, _blockFrames, _blockSize, _blockPerTimePoint, _nTimePoints, _blockBorderConsideringDrift, maxTemporalBlock, prefSpatialBlock;
 
     public float minRR, maxRR, incrementRR, ringRadius, psfWidth;
 
-    public String driftTablePath, batchFolderPath, saveFolderPath, display;
+    public String driftTablePath, display;
 
     //sweep variables
     float[] valsRR;
-    boolean[] SRRFtypes, IWs, GWs, GSs;
+    boolean[] SRRFtypes, GWs, GSs;
     int[] typeMap = new int[]{0, 1, -1, 2, 4};
     int nSRRFtypes;
+    String[] SRRFStrings = new String[]{"TRM", "TRA", "TRPPM", "TRAC2", "TRAC4"};
 
     protected static SRRF srrf = new SRRF();
-    protected SRRFAnalysis_ExtraSettings_ SRRFExtraSettings = new SRRFAnalysis_ExtraSettings_();
-    protected SRRFAnalysis_ExtraSettings_ _SRRFExtraSettings;
     private Map<String, double[]> driftTable = null;
     protected ImagePlus impReconstruction;
-    private String batchOutput;
 
     @Override
     public boolean beforeSetupDialog(String arg) {
@@ -80,7 +76,6 @@ public class SRRFParameterSweep_ extends _BaseSRRFDialog_ {
         gd.addCheckbox("TRAC4", getPrefs("doTRAC4", true));
 
         gd.addMessage("Weighting options");
-        gd.addCheckbox("Intensity weighting", getPrefs("doIW", true));
         gd.addCheckbox("Gradient weighting", getPrefs("doGW", true));
         gd.addSlider("PSF_FWHM (needed in Gradient Weighting)", 1.00f, 5.00f, getPrefs("PSF_Width", 1.35f) * 2.35);
         gd.addCheckbox("Gradient smoothing", getPrefs("doGS", false));
@@ -93,7 +88,6 @@ public class SRRFParameterSweep_ extends _BaseSRRFDialog_ {
     public boolean loadSettings() {
 
         doDriftCorrection = gd.getNextBoolean();
-
         radialityMagnification = (int) max(gd.getNextNumber(), 1);
 
         doRR = gd.getNextBoolean();
@@ -108,7 +102,6 @@ public class SRRFParameterSweep_ extends _BaseSRRFDialog_ {
         doTRAC2 = gd.getNextBoolean();
         doTRAC4 = gd.getNextBoolean();
 
-        doIW = gd.getNextBoolean();
         doGW = gd.getNextBoolean();
         psfWidth = (float) min(max(gd.getNextNumber(), 1.0f), 5.0f) / 2.35f;
         doGS = gd.getNextBoolean();
@@ -125,7 +118,6 @@ public class SRRFParameterSweep_ extends _BaseSRRFDialog_ {
         setPrefs("doTRPPM", doTRPPM);
         setPrefs("doTRAC2", doTRAC2);
         setPrefs("doTRAC4", doTRAC4);
-        setPrefs("doIW", doIW);
         setPrefs("doGW", doGW);
         setPrefs("psfWidth", psfWidth);
 
@@ -162,44 +154,67 @@ public class SRRFParameterSweep_ extends _BaseSRRFDialog_ {
 
     public void runAnalysis(ImageStack ims) {
 
-        //TODO: calculate number of images
-
         setUpSweep();
 
-        int nSRRFRuns = nSRRFtypes * valsRR.length * IWs.length * GWs.length * GSs.length;
-        _nTimePoints = nSRRFRuns;
+        int nSRRFRuns = nSRRFtypes * valsRR.length * GWs.length * GSs.length;
+        log.msg("Imma gonna run SRRF "+nSRRFRuns+" times ;-)");
+        _nTimePoints = 1;
+
+        // Image stack to contain final reconstructions
+        ImageStack imsReconstructions = new ImageStack(imp.getWidth()*radialityMagnification, imp.getHeight()*radialityMagnification, nSRRFRuns);
 
         // Start analysis
         ImageStack imsBlock;
         FloatProcessor ipBlockRC;
 
+        int thisSRRFIteration = 1;
+
         for(int nSRRF=0; nSRRF<5; nSRRF++){
+
+            // loop through temporal methods
 
             if(!SRRFtypes[nSRRF]) continue;
             int _SRRForder = typeMap[nSRRF];
-
-            for(int iw=0; iw<IWs.length; iw++){
-
-                boolean _doIW = IWs[iw];
+            String SRRFstring = SRRFStrings[nSRRF];
 
                 for(int gw=0; gw<GWs.length; gw++){
 
+                    // loop through gradient weightings
+
+                    String GWstring = "";
+
                     boolean _doGW = GWs[gw];
+
+                    if(_doGW){
+                        GWstring = "GW";
+                    }
 
                     for(int gs=0; gs<GSs.length; gs++){
 
+                        // loop through gradient smoothings
+
+                        String GSstring = "";
+
                         boolean _doGS = GSs[gs];
+                        if(_doGS){
+                            GSstring = "GS";
+                        }
 
                         for(int rr=0; rr<valsRR.length; rr++){
 
+                            // loop through ring radius
+
                             float _ringRadius = valsRR[rr];
+
+                            String RRstring = "RR="+_ringRadius;
 
                             srrf.setupSRRF(radialityMagnification, _SRRForder, 8,
                                     _ringRadius, psfWidth, _blockBorderConsideringDrift,
                                     false, false, false, false,
-                                    _doGW, _doIW, _doGS,
-                                    display);
+                                    _doGW, true, _doGS,
+                                    "Radiality");
 
+                            // set up blocks (block sizes etc. populated in the DealWithAutoSettings method)
                             ThreadedPartitionData tpd = new ThreadedPartitionData(ims);
                             tpd.setupBlockSize(_blockSize, _blockSize, _blockFrames, _blockBorderConsideringDrift, _blockBorderConsideringDrift);
 
@@ -208,12 +223,15 @@ public class SRRFParameterSweep_ extends _BaseSRRFDialog_ {
                             int hm = imp.getHeight() * m;
 
                             float averageCalculationTime = 0;
+
+                            // grab from data partitioner
                             int nIterations = tpd.tTotalBlocks * tpd.yTotalBlocks * tpd.xTotalBlocks;
                             int i = 1;
 
                             log.showTimeInMessages(true);
 
                             for (int tp = 0; tp < _nTimePoints; tp++) {
+                                // only one timepoint for parameter sweep, hardwired to _nTimePoints=1
 
                                 FloatProcessor ipRC = new FloatProcessor(wm, hm);
 
@@ -291,10 +309,24 @@ public class SRRFParameterSweep_ extends _BaseSRRFDialog_ {
                                             int _m = (int) (((ETF % 86400) % 3600) / 60);
                                             int _s = (int) (((ETF % 86400) % 3600) % 60);
                                             log.status("SRRF running at " + fpsString + " ETF " + String.format("%02d:%02d:%02d", _h, _m, _s));
+
+                                            if(thisSRRFIteration==1){
+                                                imsReconstructions.addSlice(ipRC);
+                                                imsReconstructions.setSliceLabel(SRRFstring+"_"+GWstring+"_"+GSstring+"_"+RRstring, thisSRRFIteration);
+                                                impReconstruction = new ImagePlus(imp.getTitle() + " - SRRF", imsReconstructions);
+                                                impReconstruction.show();
+                                            }
+                                            else{
+                                                imsReconstructions.addSlice(ipRC);
+                                                imsReconstructions.setSliceLabel(SRRFstring+"_"+GWstring+"_"+GSstring+"_"+RRstring, thisSRRFIteration);
+                                                impReconstruction.setStack(imsReconstructions);
+                                                impReconstruction.setSlice(thisSRRFIteration);
+                                            }
+
+                                            thisSRRFIteration++;
                                         }
                                     }
                                 }
-                                dealWithTimePointFrame(tp, ipRC);
                             }
 
                             dealWithFinalDataset(impReconstruction);
@@ -311,14 +343,14 @@ public class SRRFParameterSweep_ extends _BaseSRRFDialog_ {
             }
         }
 
-    }
 
     private void setUpSweep(){
 
         // list of ring radius
         if(doRR){
             float diffRR = maxRR - minRR;
-            int nRR = (int) (diffRR/incrementRR);
+            int nRR = (int) (diffRR/incrementRR)+1;
+            valsRR = new float[nRR];
 
             for(int n=0; n<nRR; n++){
                 valsRR[n] = minRR + (n*incrementRR);
@@ -336,10 +368,6 @@ public class SRRFParameterSweep_ extends _BaseSRRFDialog_ {
             if(SRRFtypes[i]) nSRRFtypes++;
         }
 
-        // list of intensity weightings
-        if(doIW) IWs = new boolean[]{false, true};
-        else IWs = new boolean[]{false};
-
         // list of gradient weightings
         if(doGW) GWs = new boolean[]{false, true};
         else GWs = new boolean[]{false};
@@ -350,43 +378,18 @@ public class SRRFParameterSweep_ extends _BaseSRRFDialog_ {
 
     }
 
-    protected void dealWithTimePointFrame(int timePoint, FloatProcessor ip) {
-        ImageStack imsReconstruction;
-
-        if (timePoint == 0) {
-            imsReconstruction = new ImageStack(ip.getWidth(), ip.getHeight());
-            imsReconstruction.addSlice(ip);
-            impReconstruction = new ImagePlus(imp.getTitle() + " - SRRF", imsReconstruction);
-            impReconstruction.show();
-            ij.IJ.run(impReconstruction, "Enhance Contrast", "saturated=0.35");
-            applyLUT_NanoJ_Orange(impReconstruction);
-        } else {
-            imsReconstruction = impReconstruction.getImageStack();
-            imsReconstruction.addSlice(ip);
-            impReconstruction.setStack(imsReconstruction);
-            if (impReconstruction.getSlice() >= impReconstruction.getNSlices() - 1)
-                impReconstruction.setSlice(impReconstruction.getNSlices());
-        }
-    }
 
     protected void dealWithFinalDataset(ImagePlus impReconstruction) {
         ij.IJ.run(impReconstruction, "Enhance Contrast", "saturated=0.35");
     }
 
     private void dealWithAutoSettings() {
-        if (frameStart == 0) _frameStart = 1;
-        else _frameStart = frameStart;
+        _frameStart = 1;
+        _frameEnd = imp.getStack().getSize();
+        _framesPerTimePoint = _frameEnd - _frameStart + 1;
+        maxTemporalBlock = 100;
 
-        if (frameEnd == 0) _frameEnd = imp.getStack().getSize();
-        else _frameEnd = frameEnd;
-
-        if (framesPerTimePoint == 0 || framesPerTimePoint > imp.getImageStack().getSize())
-            _framesPerTimePoint = _frameEnd - _frameStart + 1;
-        else _framesPerTimePoint = framesPerTimePoint;
-
-        if (framesPerTimePoint == 1) SRRForder = 1;
-
-        _nTimePoints = (_frameEnd - _frameStart + 1) / _framesPerTimePoint;
+        _doDriftCorrection = getDriftTableIfNeeded(false);
 
         _blockBorderConsideringDrift = (int) (blockBorderNotConsideringDrift + floor(getMaxShift()) + 1);
 
@@ -544,25 +547,5 @@ public class SRRFParameterSweep_ extends _BaseSRRFDialog_ {
         return new float[][]{shiftX, shiftY};
     }
 
-    class _SaveReconstruction extends Thread {
-        private ImageStack imsRendering;
-        private String savePath;
-
-        public void setup(ImageStack imsRendering, String savePath) {
-            this.imsRendering = imsRendering.duplicate();
-            this.savePath = savePath;
-        }
-
-        public void run() {
-            if (batchOutput == ".nji") {
-                SaveStackAsNJI_ sNJI = new SaveStackAsNJI_();
-                sNJI.filePath = savePath + ".nji";
-                sNJI.imp = new ImagePlus("", imsRendering);
-                sNJI.run();
-            } else {
-                IJ.saveAsTiff(new ImagePlus("", imsRendering), savePath + ".tif");
-            }
-        }
-    }
 }
 
