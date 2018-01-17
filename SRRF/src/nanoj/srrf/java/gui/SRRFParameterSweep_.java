@@ -128,7 +128,6 @@ public class SRRFParameterSweep_ extends _BaseSRRFDialog_ {
 
     public boolean loadSettingsFromPrefs() {
 
-        // TODO: investigate what this is
         // Configure SRRF
         blockBorderNotConsideringDrift = (int) ringRadius + 3;
         if (doGW && psfWidth > ringRadius) {
@@ -161,7 +160,7 @@ public class SRRFParameterSweep_ extends _BaseSRRFDialog_ {
         _nTimePoints = 1;
 
         // Image stack to contain final reconstructions
-        ImageStack imsReconstructions = new ImageStack(imp.getWidth()*radialityMagnification, imp.getHeight()*radialityMagnification, nSRRFRuns);
+        ImageStack imsReconstructions = new ImageStack(imp.getWidth()*radialityMagnification, imp.getHeight()*radialityMagnification);
 
         // Start analysis
         ImageStack imsBlock;
@@ -176,6 +175,14 @@ public class SRRFParameterSweep_ extends _BaseSRRFDialog_ {
             if(!SRRFtypes[nSRRF]) continue;
             int _SRRForder = typeMap[nSRRF];
             String SRRFstring = SRRFStrings[nSRRF];
+
+            for(int rr=0; rr<valsRR.length; rr++){
+
+                // loop through ring radius
+
+                float _ringRadius = valsRR[rr];
+
+                String RRstring = "RR="+_ringRadius;
 
                 for(int gw=0; gw<GWs.length; gw++){
 
@@ -200,148 +207,141 @@ public class SRRFParameterSweep_ extends _BaseSRRFDialog_ {
                             GSstring = "GS";
                         }
 
-                        for(int rr=0; rr<valsRR.length; rr++){
+                        srrf.setupSRRF(radialityMagnification, _SRRForder, 8,
+                                _ringRadius, psfWidth, _blockBorderConsideringDrift,
+                                false, false, false, false,
+                                _doGW, true, _doGS,
+                                "Radiality");
 
-                            // loop through ring radius
+                        // set up blocks (block sizes etc. populated in the DealWithAutoSettings method)
+                        ThreadedPartitionData tpd = new ThreadedPartitionData(ims);
+                        tpd.setupBlockSize(_blockSize, _blockSize, _blockFrames, _blockBorderConsideringDrift, _blockBorderConsideringDrift);
 
-                            float _ringRadius = valsRR[rr];
+                        int m = radialityMagnification;
+                        int wm = imp.getWidth() * m;
+                        int hm = imp.getHeight() * m;
 
-                            String RRstring = "RR="+_ringRadius;
+                        float averageCalculationTime = 0;
 
-                            srrf.setupSRRF(radialityMagnification, _SRRForder, 8,
-                                    _ringRadius, psfWidth, _blockBorderConsideringDrift,
-                                    false, false, false, false,
-                                    _doGW, true, _doGS,
-                                    "Radiality");
+                        // grab from data partitioner
+                        int nIterations = tpd.tTotalBlocks * tpd.yTotalBlocks * tpd.xTotalBlocks;
+                        int i = 1;
 
-                            // set up blocks (block sizes etc. populated in the DealWithAutoSettings method)
-                            ThreadedPartitionData tpd = new ThreadedPartitionData(ims);
-                            tpd.setupBlockSize(_blockSize, _blockSize, _blockFrames, _blockBorderConsideringDrift, _blockBorderConsideringDrift);
+                        log.showTimeInMessages(true);
 
-                            int m = radialityMagnification;
-                            int wm = imp.getWidth() * m;
-                            int hm = imp.getHeight() * m;
+                        for (int tp = 0; tp < _nTimePoints; tp++) {
+                            // only one timepoint for parameter sweep, hardwired to _nTimePoints=1
 
-                            float averageCalculationTime = 0;
+                            FloatProcessor ipRC = new FloatProcessor(wm, hm);
 
-                            // grab from data partitioner
-                            int nIterations = tpd.tTotalBlocks * tpd.yTotalBlocks * tpd.xTotalBlocks;
-                            int i = 1;
+                            for (int tb = 0; tb < _blockPerTimePoint; tb++) {
 
-                            log.showTimeInMessages(true);
+                                outerloop:
 
-                            for (int tp = 0; tp < _nTimePoints; tp++) {
-                                // only one timepoint for parameter sweep, hardwired to _nTimePoints=1
+                                for (int yb = 0; yb < tpd.yTotalBlocks; yb++) {
 
-                                FloatProcessor ipRC = new FloatProcessor(wm, hm);
+                                    int yLMargin = (yb == 0) ? 0 : _blockBorderConsideringDrift * m;
+                                    int yRMargin = (yb == tpd.yTotalBlocks - 1) ? 0 : _blockBorderConsideringDrift * m;
 
-                                for (int tb = 0; tb < _blockPerTimePoint; tb++) {
+                                    for (int xb = 0; xb < tpd.xTotalBlocks; xb++) {
 
-                                    outerloop:
-
-                                    for (int yb = 0; yb < tpd.yTotalBlocks; yb++) {
-
-                                        int yLMargin = (yb == 0) ? 0 : _blockBorderConsideringDrift * m;
-                                        int yRMargin = (yb == tpd.yTotalBlocks - 1) ? 0 : _blockBorderConsideringDrift * m;
-
-                                        for (int xb = 0; xb < tpd.xTotalBlocks; xb++) {
-
-                                            if (!prefs.continueNanoJCommand()) {
-                                                log.abort();
-                                                return;
-                                            }
-                                            if (IJ.escapePressed()) {
-                                                IJ.resetEscape();
-                                                log.abort();
-                                                return;
-                                            }
-
-                                            log.progress(i, nIterations);
-                                            i++;
-
-                                            // load block data
-                                            String oldStatus = log.currentStatus;
-                                            log.status("loading data...");
-                                            try {
-                                                imsBlock = tpd.getNextBlock();
-                                            } catch (NullPointerException e) {
-                                                break outerloop;
-                                            }
-                                            log.status(oldStatus);
-
-                                            float startTime = log.getTimerValueSeconds();
-
-                                            // load drift data
-                                            float[][] shift = getShiftArrays(_frameStart + (tp * _blockPerTimePoint + tb) * _blockFrames, imsBlock.getSize());
-
-                                            // do the analysis
-                                            ipBlockRC = srrf.calculate(imsBlock, shift[0], shift[1]);
-
-                                            // copy pixels
-                                            int xLMargin = (xb == 0) ? 0 : _blockBorderConsideringDrift * m;
-                                            int xRMargin = (xb == tpd.xTotalBlocks - 1) ? 0 : _blockBorderConsideringDrift * m;
-                                            int interiorWidth = ipBlockRC.getWidth() - xLMargin - xRMargin;
-                                            int interiorHeight = ipBlockRC.getHeight() - yLMargin - yRMargin;
-                                            int xRC0 = xb * _blockSize * m;
-                                            int yRC0 = yb * _blockSize * m;
-
-
-                                            for (int yBI = 0; yBI < interiorHeight; yBI++) {
-                                                for (int xBI = 0; xBI < interiorWidth; xBI++) {
-                                                    int xB = xBI + xLMargin;
-                                                    int yB = yBI + yLMargin;
-                                                    int xRC = xRC0 + xBI;
-                                                    int yRC = yRC0 + yBI;
-                                                    float pixelV = (ipBlockRC.getf(xB, yB) / _blockPerTimePoint) + ipRC.getf(xRC, yRC);
-                                                    ipRC.setf(xRC, yRC, pixelV);
-                                                }
-                                            }
-
-                                            float calculationTime = log.getTimerValueSeconds() - startTime;
-                                            averageCalculationTime += (calculationTime - averageCalculationTime) / (i - 1);
-                                            float fps = _blockFrames / (averageCalculationTime * tpd.xTotalBlocks * tpd.yTotalBlocks);
-                                            float ETF = (nIterations - i) * averageCalculationTime;
-                                            String fpsString;
-                                            if (fps > 1e3) fpsString = round(fps / 1000f) + "kFPS";
-                                            else fpsString = round(fps) + "FPS";
-
-                                            int _h = (int) (ETF / 3600);
-                                            int _m = (int) (((ETF % 86400) % 3600) / 60);
-                                            int _s = (int) (((ETF % 86400) % 3600) % 60);
-                                            log.status("SRRF running at " + fpsString + " ETF " + String.format("%02d:%02d:%02d", _h, _m, _s));
-
-                                            if(thisSRRFIteration==1){
-                                                imsReconstructions.addSlice(ipRC);
-                                                imsReconstructions.setSliceLabel(SRRFstring+"_"+GWstring+"_"+GSstring+"_"+RRstring, thisSRRFIteration);
-                                                impReconstruction = new ImagePlus(imp.getTitle() + " - SRRF", imsReconstructions);
-                                                impReconstruction.show();
-                                            }
-                                            else{
-                                                imsReconstructions.addSlice(ipRC);
-                                                imsReconstructions.setSliceLabel(SRRFstring+"_"+GWstring+"_"+GSstring+"_"+RRstring, thisSRRFIteration);
-                                                impReconstruction.setStack(imsReconstructions);
-                                                impReconstruction.setSlice(thisSRRFIteration);
-                                            }
-
-                                            thisSRRFIteration++;
+                                        if (!prefs.continueNanoJCommand()) {
+                                            log.abort();
+                                            return;
                                         }
+                                        if (IJ.escapePressed()) {
+                                            IJ.resetEscape();
+                                            log.abort();
+                                            return;
+                                        }
+
+                                        log.progress(i, nIterations);
+                                        i++;
+
+                                        // load block data
+                                        String oldStatus = log.currentStatus;
+                                        log.status("loading data...");
+                                        try {
+                                            imsBlock = tpd.getNextBlock();
+                                        } catch (NullPointerException e) {
+                                            break outerloop;
+                                        }
+                                        log.status(oldStatus);
+
+                                        float startTime = log.getTimerValueSeconds();
+
+                                        // load drift data
+                                        float[][] shift = getShiftArrays(_frameStart + (tp * _blockPerTimePoint + tb) * _blockFrames, imsBlock.getSize());
+
+                                        // do the analysis
+                                        ipBlockRC = srrf.calculate(imsBlock, shift[0], shift[1]);
+
+                                        // copy pixels
+                                        int xLMargin = (xb == 0) ? 0 : _blockBorderConsideringDrift * m;
+                                        int xRMargin = (xb == tpd.xTotalBlocks - 1) ? 0 : _blockBorderConsideringDrift * m;
+                                        int interiorWidth = ipBlockRC.getWidth() - xLMargin - xRMargin;
+                                        int interiorHeight = ipBlockRC.getHeight() - yLMargin - yRMargin;
+                                        int xRC0 = xb * _blockSize * m;
+                                        int yRC0 = yb * _blockSize * m;
+
+
+                                        for (int yBI = 0; yBI < interiorHeight; yBI++) {
+                                            for (int xBI = 0; xBI < interiorWidth; xBI++) {
+                                                int xB = xBI + xLMargin;
+                                                int yB = yBI + yLMargin;
+                                                int xRC = xRC0 + xBI;
+                                                int yRC = yRC0 + yBI;
+                                                float pixelV = (ipBlockRC.getf(xB, yB) / _blockPerTimePoint) + ipRC.getf(xRC, yRC);
+                                                ipRC.setf(xRC, yRC, pixelV);
+                                            }
+                                        }
+
+                                        float calculationTime = log.getTimerValueSeconds() - startTime;
+                                        averageCalculationTime += (calculationTime - averageCalculationTime) / (i - 1);
+                                        float fps = _blockFrames / (averageCalculationTime * tpd.xTotalBlocks * tpd.yTotalBlocks);
+                                        float ETF = (nIterations - i) * averageCalculationTime;
+                                        String fpsString;
+                                        if (fps > 1e3) fpsString = round(fps / 1000f) + "kFPS";
+                                        else fpsString = round(fps) + "FPS";
+
+                                        int _h = (int) (ETF / 3600);
+                                        int _m = (int) (((ETF % 86400) % 3600) / 60);
+                                        int _s = (int) (((ETF % 86400) % 3600) % 60);
+                                        log.status("SRRF running at " + fpsString + " ETF " + String.format("%02d:%02d:%02d", _h, _m, _s));
+
                                     }
                                 }
                             }
 
-                            dealWithFinalDataset(impReconstruction);
+                            if(thisSRRFIteration==1){
+                                imsReconstructions.addSlice(ipRC);
+                                imsReconstructions.setSliceLabel(SRRFstring+"_"+GWstring+"_"+GSstring+"_"+RRstring, thisSRRFIteration);
+                                impReconstruction = new ImagePlus(imp.getTitle() + " - SRRF", imsReconstructions);
+                                impReconstruction.show();
+                            }
+                            else{
+                                imsReconstructions.addSlice(ipRC);
+                                imsReconstructions.setSliceLabel(SRRFstring+"_"+GWstring+"_"+GSstring+"_"+RRstring, thisSRRFIteration);
+                                impReconstruction.setStack(imsReconstructions);
+                                impReconstruction.setSlice(thisSRRFIteration);
+                            }
 
-                            log.msg(2, String.format("SRRF: full analysis took %gs", log.getTimerValueSeconds()));
-                            log.status("Done...");
-                            log.progress(1);
-
+                            thisSRRFIteration++;
                         }
 
-                    }
-                }
+                        log.msg(2, String.format("SRRF: full analysis took %gs", log.getTimerValueSeconds()));
+                        log.status("Done...");
+                        log.progress(1);
 
+                    }
+
+                }
             }
+
         }
+
+        dealWithFinalDataset(impReconstruction);
+    }
 
 
     private void setUpSweep(){
