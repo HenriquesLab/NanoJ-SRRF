@@ -11,6 +11,8 @@ import nanoj.srrf.java._BaseSRRFDialog_;
 import java.awt.*;
 import java.io.IOException;
 
+import static java.lang.Math.abs;
+import static java.lang.Math.sqrt;
 import static nanoj.core.java.array.ArrayInitialization.initializeRandomIndexes;
 
 /**
@@ -94,7 +96,7 @@ public class CalculateTemporalAutoCorrelations_ extends _BaseSRRFDialog_ {
                 log.progress(counter, nPixels);
                 log.displayETF("Auto-correlation", counter, nPixels);
             }
-            ThreadedTemporalCorrelations t = new ThreadedTemporalCorrelations(p, data[p], temporalCorrelationResults);
+            ThreadedTemporalCorrelationsForTimeLags t = new ThreadedTemporalCorrelationsForTimeLags(p, data[p], temporalCorrelationResults);
             NTE.execute(t);
         }
         log.progress(counter, nPixels);
@@ -102,9 +104,9 @@ public class CalculateTemporalAutoCorrelations_ extends _BaseSRRFDialog_ {
 
         // plotting correlations
         for (int timeLag=1; timeLag<=nTimeLags; timeLag++) {
-            imsTemporalCorrelations.setProcessor(
-                    new FloatProcessor(w, h, temporalCorrelationResults[timeLag-1]), timeLag);
-            imsTemporalCorrelations.setSliceLabel("Time-Lag "+timeLag, timeLag);
+            FloatProcessor fp = new FloatProcessor(w, h, temporalCorrelationResults[timeLag-1]);
+            imsTemporalCorrelations.setProcessor(fp, timeLag);
+            imsTemporalCorrelations.setSliceLabel("Time-Lag "+(timeLag-1), timeLag);
         }
         ImagePlus impTemporalCorrelations =
                 new ImagePlus(imp.getTitle()+" - Temporal Auto-Correlations", imsTemporalCorrelations);
@@ -113,12 +115,12 @@ public class CalculateTemporalAutoCorrelations_ extends _BaseSRRFDialog_ {
         IJ.run(impTemporalCorrelations, "Fire", "");
     }
 
-    class ThreadedTemporalCorrelations extends Thread {
+    class ThreadedTemporalCorrelationsForTimeLags extends Thread {
         private final int pixelId;
         public final float[] temporalData;
         public final float[][] temporalCorrelations;
 
-        public ThreadedTemporalCorrelations(int pixelId, float[] temporalData, float[][] temporalCorrelations) {
+        public ThreadedTemporalCorrelationsForTimeLags(int pixelId, float[] temporalData, float[][] temporalCorrelations) {
             this.pixelId = pixelId;
             this.temporalData = temporalData;
             this.temporalCorrelations = temporalCorrelations;
@@ -136,28 +138,26 @@ public class CalculateTemporalAutoCorrelations_ extends _BaseSRRFDialog_ {
             for (int t=0; t<nSlices; t++) temporalData[t] -= mean;
 
             // now calculate the temporal correlations
-            double [] counter = new double[nTimeLags];
-            for (int t0 = 0; t0 < nTimeLags; t0++) {
-                for (int t1 = t0 + 1; t1 < nSlices; t1++) {
-                    int idTimeLag = (t1 - t0) - 1;
-                    if (idTimeLag >= nTimeLags) continue;
+            for (int tl = 0; tl < nTimeLags; tl++) {
+                int counter = 0;
+                double covariance = 0;
+                double squareSum0 = 0;
+                double squareSum1 = 0;
 
-                    float v0 = temporalData[t0];
-                    float v1 = temporalData[t1];
-                    double covariance = v0 * v1;
-
-                    temporalCorrelations[idTimeLag][pixelId] +=
-                            (covariance-temporalCorrelations[idTimeLag][pixelId])/(counter[idTimeLag]+1); // this is just a fancy rolling mean
-                    counter[idTimeLag]++;
+                for (int t=tl; t<nSlices; t++) {
+                    float v0 = abs(temporalData[t-tl]);
+                    float v1 = abs(temporalData[t]);
+                    covariance += v0 * v1;
+                    squareSum0 += v0 * v0;
+                    squareSum1 += v1 * v1;
+                    counter++;
                 }
-            }
-            if (normalise == true) {
-                double variance = 0;
-                for (int t = 0; t < nSlices; t++)
-                    variance += temporalData[t] * temporalData[t] / nSlices;
-                if (variance != 0) // avoid 0-division
-                    for (int idTimeLag = 0; idTimeLag < nTimeLags; idTimeLag++)
-                        temporalCorrelations[idTimeLag][pixelId] /= variance;
+
+                if (normalise == true) {
+                    if (squareSum0 != 0 && squareSum1 != 0) temporalCorrelations[tl][pixelId] = (float) (covariance / sqrt(squareSum0 * squareSum1));
+                }
+                else
+                    temporalCorrelations[tl][pixelId] = (float) sqrt(covariance / counter);
             }
         }
     }
