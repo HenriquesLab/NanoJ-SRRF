@@ -17,7 +17,7 @@ public class ApplyDriftCorrection {
         log.status("Duplicating data...");
         ImagePlus impDC = imp.duplicate();
         impDC.setTitle(imp.getTitle()+" - drift corrected");
-        ImageStack imsDC = imp.getImageStack();
+        ImageStack imsDC = impDC.getImageStack();
         int nSlices = imsDC.getSize();
 
         NanoJThreadExecutor NTE = new NanoJThreadExecutor(false);
