@@ -60,7 +60,7 @@ public class DriftEstimation_ extends _BaseSRRFDialog_ {
     public void setupDialog() {
 
         gd = new NonBlockingGenericDialog("Estimate Drift...");
-        gd.addNumericField("Time averaging (default: 100)", getPrefs("timeAveraging", 100), 0);
+        gd.addNumericField("Time averaging (default: 100, 1 - disables)", getPrefs("timeAveraging", 100), 0);
         gd.addNumericField("Max expected drift (pixels, 0 - auto)", getPrefs("maxExpectedDrift", 10), 0);
         gd.addChoice("Reference frame", options, options[getPrefs("refOption", 0)]);
         gd.addMessage("Note: you can also draw a ROI around a stable structure to use it as the reference");
@@ -164,17 +164,31 @@ public class DriftEstimation_ extends _BaseSRRFDialog_ {
         }
 
         int timeBlocks = nSlices / timeAveraging;
+        if (nSlices % timeAveraging != 0) timeBlocks++;
 
         ImageStack imsAverage = new ImageStack(rw, rh);
+
         for (int tb=0; tb<timeBlocks; tb++) {
             if (!prefs.continueNanoJCommand()) {
                 log.abort();
                 return;
             }
 
-            log.status("time averaging data... "+round(100*(tb+1)/timeBlocks)+"%");
+            log.status("preparing data... ");
             log.progress(tb+1, timeBlocks);
 
+            // case of no temporal averaging
+            if (timeAveraging == 1) {
+                FloatProcessor fpFrame = ims.getProcessor(tb+1).convertToFloatProcessor();
+                if (r != null) {
+                    fpFrame.setRoi(r);
+                    fpFrame = (FloatProcessor) fpFrame.crop();
+                }
+                imsAverage.addSlice(fpFrame);
+                continue;
+            }
+
+            // case of temporal averaging
             FloatProcessor fpAverage = new FloatProcessor(rw, rh);
             imsAverage.addSlice(fpAverage);
             float[] pixelsAverage = (float[]) fpAverage.getPixels();
@@ -206,6 +220,7 @@ public class DriftEstimation_ extends _BaseSRRFDialog_ {
         }
 
         ImageStack imsCCM;
+        //IJ.log(""+refOption);
         if (refOption == 0) imsCCM = calculateCrossCorrelationMap(ipRef, imsAverage, true);
         else imsCCM = calculateCrossCorrelationMap(null, imsAverage, true);
 
@@ -221,27 +236,32 @@ public class DriftEstimation_ extends _BaseSRRFDialog_ {
 
         log.status("calculating cross-correlation peaks...");
         float[][] drift = getShiftFromCrossCorrelationPeak(imsCCM, MAX_FITTING);
-        double[] driftX = new double[timeBlocks + 1];
-        double[] driftY = new double[timeBlocks + 1];
+        double[] driftX = new double[timeBlocks];
+        double[] driftY = new double[timeBlocks];
+        double biasX = drift[1][0];
+        double biasY = drift[2][0];
         for (int p = 0; p < timeBlocks; p++) {
-            driftX[p + 1] = drift[1][p];
-            driftY[p + 1] = drift[2][p];
-            if (refOption == 1) {
-                driftX[p + 1] += driftX[p];
-                driftY[p + 1] += driftY[p];
+            driftX[p] = drift[1][p] - biasX;
+            driftY[p] = drift[2][p] - biasY;
+            if (refOption == 1 && p > 0) {
+                driftX[p] += driftX[p-1];
+                driftY[p] += driftY[p-1];
             }
         }
 
-        // interpolate data
-        FloatProcessor fpDriftX = new FloatProcessor(timeBlocks+1, 1, driftX);
-        FloatProcessor fpDriftY = new FloatProcessor(timeBlocks+1, 1, driftY);
+        if (timeAveraging>1) {
+            // interpolate data
+            FloatProcessor fpDriftX = new FloatProcessor(timeBlocks, 1, driftX);
+            FloatProcessor fpDriftY = new FloatProcessor(timeBlocks, 1, driftY);
 
-        fpDriftX.setInterpolationMethod(ImageProcessor.BICUBIC);
-        fpDriftY.setInterpolationMethod(ImageProcessor.BICUBIC);
-        fpDriftX = (FloatProcessor) fpDriftX.resize(nSlices, 1);
-        fpDriftY = (FloatProcessor) fpDriftY.resize(nSlices, 1);
-        driftX = floatToDouble((float[]) fpDriftX.getPixels());
-        driftY = floatToDouble((float[]) fpDriftY.getPixels());
+            fpDriftX.setInterpolationMethod(ImageProcessor.BICUBIC);
+            fpDriftY.setInterpolationMethod(ImageProcessor.BICUBIC);
+            fpDriftX = (FloatProcessor) fpDriftX.resize(nSlices, 1);
+            fpDriftY = (FloatProcessor) fpDriftY.resize(nSlices, 1);
+            driftX = floatToDouble((float[]) fpDriftX.getPixels());
+            driftY = floatToDouble((float[]) fpDriftY.getPixels());
+        }
+
         double[] driftXY = new double[nSlices];
         for (int p=0; p<nSlices; p++) driftXY[p] = (float) sqrt(pow(driftX[p]+driftY[p], 2));
 
