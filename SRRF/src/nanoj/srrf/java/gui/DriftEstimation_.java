@@ -13,6 +13,7 @@ import ij.process.FloatProcessor;
 import ij.process.ImageProcessor;
 import nanoj.core.java.array.ArrayInitialization;
 import nanoj.core.java.featureExtraction.ExtractRois;
+import nanoj.core.java.gui._BaseDialog_;
 import nanoj.core.java.image.transform.CrossCorrelationMap;
 import nanoj.srrf.java.ApplyDriftCorrection;
 import nanoj.srrf.java._BaseSRRFDialog_;
@@ -38,7 +39,7 @@ import static nanoj.core.java.io.SaveNanoJTable.saveNanoJTable;
  * Date: 02/04/15
  * Time: 16:02
  */
-public class DriftEstimation_ extends _BaseSRRFDialog_ {
+public class DriftEstimation_ extends _BaseDialog_ {
 
     private int timeAveraging;
     private int maxExpectedDrift;

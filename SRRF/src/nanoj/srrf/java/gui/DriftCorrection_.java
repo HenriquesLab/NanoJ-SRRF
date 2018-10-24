@@ -3,9 +3,9 @@ package nanoj.srrf.java.gui;
 import ij.IJ;
 import ij.ImagePlus;
 import ij.gui.NonBlockingGenericDialog;
+import nanoj.core.java.gui._BaseDialog_;
 import nanoj.core.java.io.LoadNanoJTable;
 import nanoj.srrf.java.ApplyDriftCorrection;
-import nanoj.srrf.java._BaseSRRFDialog_;
 
 import java.io.IOException;
 import java.util.Map;
@@ -13,7 +13,7 @@ import java.util.Map;
 /**
  * Created by Henriques-lab on 18/03/2017.
  */
-public class DriftCorrection_ extends _BaseSRRFDialog_ {
+public class DriftCorrection_ extends _BaseDialog_ {
 
     private double[] driftX, driftY;
     ApplyDriftCorrection adc = new ApplyDriftCorrection();
