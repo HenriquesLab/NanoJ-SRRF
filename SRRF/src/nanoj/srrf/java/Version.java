@@ -15,7 +15,7 @@ public class Version extends _Version_ {
     // NanoJ SRRF nanoj.core.java.Version
     protected final static String tagInPrefs = "NJ.SRRF.version";
     protected final static int major = 1;
-    protected final static int minor = 13;
+    protected final static int minor = 14;
     protected final static int status = 3; // 0 - alpha, 1 - beta, 2 - release candidate, 3 - stable
     protected final static int release = 1;
     protected final static String codename = "";
@@ -23,9 +23,7 @@ public class Version extends _Version_ {
     public final static String WHATS_NEW =
             nanoj.core.java.Version.WHATS_NEW +  "\n \n" +
             "What's new in NanoJ-SRRF " + headlessGetVersion() + ":\n" +
-                    "- Added FRC Map plugin\n" +
-                    "- Added odd-even frame stack split (to help with FRC)\n" +
-                    "- Added Temporal Auto-Correlations plugin\n" +
+                    "- Drift functions migrated to NanoJ-Core\n" +
                     "- Bug fixes...\n";
 
     public static String getVersion() {
