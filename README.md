@@ -20,7 +20,7 @@ Here is a [**list of researchers**](https://bitbucket.org/rhenriqueslab/nanoj-sr
 
 ## About SRRF ##
 
-**SRRF** is part of the [**NanoJ project**](https://bitbucket.org/account/user/rhenriqueslab/projects/NANOJ) - a collection of analytical methods dedicated to super-resolution and advanced imaging compatible with ImageJ. Both **SRRF** and **NanoJ** are developed by the [**Henriques laboratory**](http://www.ucl.ac.uk/lmcb/users/ricardo-henriques) in the [MRC Laboratory for Molecular Cell Biology](http://www.ucl.ac.uk/lmcb/) at [University College London](http://www.ucl.ac.uk/).
+**SRRF** is part of the [**NanoJ project**](https://github.com/HenriquesLab/NanoJ-Core) - a collection of analytical methods dedicated to super-resolution and advanced imaging compatible with ImageJ. Both **SRRF** and **NanoJ** are developed by the [**Henriques laboratory**](http://www.ucl.ac.uk/lmcb/users/ricardo-henriques) in the [MRC Laboratory for Molecular Cell Biology](http://www.ucl.ac.uk/lmcb/) at [University College London](http://www.ucl.ac.uk/).
 
 [![](https://bitbucket.org/repo/MxA9bg/images/1852944901-youtube%20screenshot.jpg)](https://youtu.be/wb78HsPwQ38)
 `Microtubules labelled with tubulin-GFP and imaging performed on a spinning disk confocal microscope. Z sections were taken at 300nm intervals, with each SRRF image produced from SRRF analysis of 100 raw frames acquired at each interval; for comparison the average of these 100 spinning disk frames is displayed on the left. The right hand panel shows the cumulative projections of the SRRF and spinning disk images colour-coded by z position.`
