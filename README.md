@@ -9,6 +9,7 @@
 [![](https://bitbucket.org/repo/MxA9bg/images/3159217949-test.jpg)](https://youtu.be/1o7TW32pUKE)
 `Actin labelled with LifeAct-GFP and imaging performed on a standard TIRF microscope. Each SRRF frame was produced by running SRRF analysis on 100 frames of the raw TIRF acquisition; for comparison the average of these 100 TIRF frames is displayed on the left.`
 
+⚠️WARNING⚠️, 🔴IMPORTANT❗🔴 There seems to be an issue with runnung NanoJ-Core & SRRF on Windows. We are investigating the [issue](https://forum.image.sc/t/fiji-crashes-when-starting-nanoj/91657). NanoJ-eSRRF is not affected by this, check it out [here](https://github.com/HenriquesLab/NanoJ-eSRRF).
 
 ## Tutorials on how to get started ##
 
