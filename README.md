@@ -41,3 +41,9 @@ Here is a [**list of researchers**](https://bitbucket.org/rhenriqueslab/nanoj-sr
 
 [![](https://bitbucket.org/repo/MxA9bg/images/1948380863-MTs%20placeholder.jpg)](https://youtu.be/vR176IW0bPw)
 `Microtubules labelled with GFP and imaging is performed on a standard TIRF microscope. Each SRRF frame was produced by running SRRF analysis on 100 frames of the raw TIRF acquisition; for comparison the average of these 100 TIRF frames is displayed above.`
+
+## SRRFing in Python
+
+Exciting news! Super-Resolution Radial Fluctuations (SRRF) is now accessible in Python through the [NanoPyx](https://github.com/HenriquesLab/NanoPyx) package. This integration brings the power and versatility of SRRF to Python users, opening up new possibilities for analysis and integration within Python-based workflows.
+
+NanoPyx, a Python package developed in collaboration with the Henriques laboratory, seamlessly integrates SRRF capabilities into Python environments. With NanoPyx, users can now leverage SRRF's high-performance analytical approach within their Python scripts, pipelines, and interactive sessions. Through NanoPyx, SRRF is also available as "codeless" Jupyter Notebooks and a [napari plugin](https://github.com/HenriquesLab/napari-NanoPyx).
